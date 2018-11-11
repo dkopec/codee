@@ -30,6 +30,12 @@ class TumblrClient(object):
 
         self.client = pytumblr.TumblrRestClient(consumer_key, consumer_secret, oauth_token, oauth_secret)
 
+        self.user_info = self.client.info()
+
+        self.blogs = []
+
+        for blog in self.user_info['user']['blogs']:
+            self.blogs.append(blog['name'])
 
     def say_hello(self):
         """
@@ -38,16 +44,6 @@ class TumblrClient(object):
         :returns: a string, Hello!
         """
         return "Hello!"
-
-    def user_info(self):
-        """
-        Retrieves and returns the user information associated with the credntials
-        being used.
-
-        :returns: a dictionary, all information about the authenticated user.
-        """
-
-        return self.client.info()
 
     def queue_post(self, blog, post_id, type):
         """
@@ -60,6 +56,33 @@ class TumblrClient(object):
         :returns: None
         """
         self.client.edit_post(blog, id=post_id, type=type, state='queue')
+
+    def draft_post(self, blog, post_id, type):
+        """
+        Transfers post from a given blogs drafts to its queue.
+
+        :param blog_name: a string, the name of the blog you want to use
+        :param post_id:   a string, the unique id of the post you want to queue
+        :param type:      a string, the type of post it is, required for editing
+
+        :returns: None
+        """
+        self.client.edit_post(blog, id=post_id, type=type, state='draft')
+
+    def draft_queued(self, blog_name):
+        """
+        Transfers posts from a given blogs queue to its drafts until the queue
+        is empty.
+
+        :param blog_name:       a string, the name of the blog you want to use
+
+        :returns: None
+        """
+
+        queued = self.client.queue(blog_name)
+
+        for index, post in enumerate(queued["posts"]):
+            self.draft_post(blog_name, post['id'], type=post['type'])
 
     def queue_drafts(self, blog_name, organic=True):
         """
@@ -83,21 +106,27 @@ class TumblrClient(object):
                     current_author = drafts["posts"][index]['trail'][0]['blog']['name']
                 except:
                     try:
-                        current_author = drafts["posts"][index]['trail'][0]['blog']['name']
+                        current_author = drafts["posts"][index]['tags'][0]
                     except:
                         continue
                 try:
                     previous_author = drafts["posts"][index-1]['trail'][0]['blog']['name']
                 except:
                     try:
-                        previous_author = drafts["posts"][index-1]['trail'][0]['blog']['name']
+                        previous_author = drafts["posts"][index-1]['tags'][0]
                     except:
                         continue
 
+                print("Current author is:  ", current_author)
+                print("Previous author is: ", previous_author)
+
                 if current_author == previous_author:
+                    print("skipping...")
                     continue
 
+            print("Queuing post#", post['id'])
             self.queue_post(blog_name, post['id'], type=post['type'])
 
+        self.queue_drafts(blog_name, organic)
 
     #TODO:def reblog_every(self,post_id,blog_id):
