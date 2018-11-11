@@ -24,26 +24,8 @@ import code
 from requests_oauthlib import OAuth1Session
 
 version="Codee CLI v0.0.1"
-tokens = {}
-current_user = 0
-save_path = os.path.expanduser('~') + '/.tumblr'
 
-def change_user(user_name):
-    """
-    Obtains and stores authorization information for OAuth1 connection.
-
-    :param user_name:   a string, the name of the user you want to act as
-
-    :returns: none.
-    """
-
-    for index, user in enumerate(tokens['users']):
-        if user['name'] == user_name:
-            current_user = index
-
-    new_oauth(save_path)
-
-def new_oauth(save_path):
+def new_oauth(save_path, tokens={}):
     """
     Obtains and stores authorization information for OAuth1 connection.
 
@@ -93,27 +75,11 @@ def new_oauth(save_path):
     )
     oauth_tokens = oauth_session.fetch_access_token(access_token_url)
 
-    info_client = codee.TumblrClient(
-        tokens['consumer_key'],
-        tokens['consumer_secret'],
-        oauth_tokens.get('oauth_token'),
-        oauth_tokens.get('oauth_token_secret')
-    )
-
-    if 'users' in tokens:
-        tokens['users'].append({
-            'name': info_client.user_info()['user']['name'],
-            'oauth_token': oauth_tokens.get('oauth_token'),
-            'oauth_token_secret': oauth_tokens.get('oauth_token_secret')
-        })
-    else:
-        tokens['users'] = [{
-            'name': info_client.user_info()['user']['name'],
-            'oauth_token': oauth_tokens.get('oauth_token'),
-            'oauth_token_secret': oauth_tokens.get('oauth_token_secret')
-        }]
+    tokens['oauth_token'] = oauth_tokens.get('oauth_token')
+    tokens['oauth_token_secret'] = oauth_tokens.get('oauth_token_secret')
 
     with open(save_path, 'w+') as save_file:
+        print("Saving to", save_path)
         json.dump(tokens, save_file)
 
     return tokens
@@ -121,6 +87,9 @@ def new_oauth(save_path):
 if __name__ == '__main__':
     # arguments = docopt(__doc__, version=version)
     # print(arguments)
+
+    save_path = os.path.join(os.path.expanduser('~'), '.tumblr')
+    tokens = {}
 
     if not os.path.exists(save_path):
         print(save_path, "not found, creating.")
@@ -133,10 +102,10 @@ if __name__ == '__main__':
     client = codee.TumblrClient(
         tokens['consumer_key'],
         tokens['consumer_secret'],
-        tokens['users'][current_user]['oauth_token'],
-        tokens['users'][current_user]['oauth_token_secret']
+        tokens['oauth_token'],
+        tokens['oauth_token_secret']
     )
 
-    print('pytumblr client created. You may run codee commands prefixed with "client".\n')
+    print('codee client created. You may run codee commands prefixed with "client".\n')
 
-    code.interact(local=dict(globals(), **{'client': client,'oauth':save_path}))
+    code.interact(local=dict(globals(), **{'client': client,'save_path':save_path}))

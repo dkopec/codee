@@ -79,8 +79,20 @@ class TumblrClient(object):
             # If organic option is enabled
             if organic and index > 0:
                 # Skip the post if it is not by the same author as the last
-                current_author = drafts["posts"][index]['trail'][0]['blog']['name']
-                previous_author = drafts["posts"][index-1]['trail'][0]['blog']['name']
+                try:
+                    current_author = drafts["posts"][index]['trail'][0]['blog']['name']
+                except:
+                    try:
+                        current_author = drafts["posts"][index]['trail'][0]['blog']['name']
+                    except:
+                        continue
+                try:
+                    previous_author = drafts["posts"][index-1]['trail'][0]['blog']['name']
+                except:
+                    try:
+                        previous_author = drafts["posts"][index-1]['trail'][0]['blog']['name']
+                    except:
+                        continue
 
                 if current_author == previous_author:
                     continue
