@@ -16,16 +16,53 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import input
 
-from docopt import docopt
 import codee
 import json
+import errno
 import os
 import code
 from requests_oauthlib import OAuth1Session
+import webbrowser
 
-version="Codee CLI v0.0.1"
+class CodeeCLI():
 
-def new_oauth(save_path, tokens={}):
+    def __init__(self, save_folder = os.path.join(os.path.expanduser('~'), '.codee')):
+        self.save_folder = save_folder
+
+        if not os.path.exists(self.save_folder):
+            print("{0} does not exist, create? (y/n):").format(self.save_folder)
+            answer = input().lowercase
+
+            if answer in ['y', 'yes']:
+                os.mkdir(self.save_folder)
+            else:
+                exit()
+
+        tumblr_auth_save_path = os.path.join(save_folder, 'tumblr')
+
+        self.tumblroauth = TumblrOAuth(tumblr_auth_save_path)
+
+        self.handler = FileHandler()
+
+class FileHandler():
+
+    def load(self, path):
+        with open(path, "r") as file:
+            print("Loading from: ", path)
+            loaded = json.load(file)
+            return loaded
+
+    def save(self, path, data):
+        with open(path, 'w+') as file:
+            print("Saving to: ", path)
+            json.dump(data, file, indent=2)
+
+    def update(self, path, data):
+        old_data = self.load(path)
+        updated_data = old_data.update(data)
+        self.save(path, updated_data)
+
+class TumblrOAuth():
     """
     Obtains and stores authorization information for OAuth1 connection.
 
@@ -34,78 +71,98 @@ def new_oauth(save_path, tokens={}):
     :returns: a dictionary, tokens for connecting using OAuth.
     """
 
-    print('Adding new authorization credentials:')
+    def __init__(self, save_path, consumer_key="", consumer_secret="", oauth_token="", oauth_secret =""):
 
-    request_token_url = 'http://www.tumblr.com/oauth/request_token'
-    authorize_url = 'http://www.tumblr.com/oauth/authorize'
-    access_token_url = 'http://www.tumblr.com/oauth/access_token'
+        self.consumer_key = consumer_key
+        self.consumer_secret = consumer_secret
+        self.oauth_token = oauth_token
+        self.oauth_secret = oauth_secret
 
-    if not 'consumer_key' in tokens:
-        print('Retrieve consumer key and consumer secret from http://www.tumblr.com/oauth/apps')
-        consumer_key = input('Paste the consumer key here: ')
-        consumer_secret = input('Paste the consumer secret here: ')
-        tokens['consumer_key'] = consumer_key;
-        tokens['consumer_secret'] = consumer_secret;
+        handler = FileHandler()
 
-    # STEP 1: Obtain request token
-    oauth_session = OAuth1Session(tokens['consumer_key'], client_secret=tokens['consumer_secret'])
-    fetch_response = oauth_session.fetch_request_token(request_token_url)
-    resource_owner_key = fetch_response.get('oauth_token')
-    resource_owner_secret = fetch_response.get('oauth_token_secret')
+        request_token_url = 'http://www.tumblr.com/oauth/request_token'
+        authorize_url = 'http://www.tumblr.com/oauth/authorize'
+        access_token_url = 'http://www.tumblr.com/oauth/access_token'
 
-    # STEP 2: Authorize URL + Rresponse
-    full_authorize_url = oauth_session.authorization_url(authorize_url)
+        if not os.path.exists(save_path):
+            print(save_path, " not found, create new tumblr authorization file? (y/n)")
+            answer = input().lower()
 
-    # Redirect to authentication page
-    print('\nPlease go here and authorize:\n{}'.format(full_authorize_url))
-    redirect_response = input('Allow then paste the full redirect URL here:\n')
+            if answer in ['y', 'yes']:
+                handler.save(save_path, self.to_json())
 
-    # Retrieve oauth verifier
-    oauth_response = oauth_session.parse_authorization_response(redirect_response)
+            else:
+                exit()
 
-    verifier = oauth_response.get('oauth_verifier')
+        else:
+            print(save_path, "found, loading.")
+            save_file = handler.load(save_path)
+            self.consumer_key = save_file['consumer_key']
+            self.consumer_secret = save_file['consumer_secret']
+            self.oauth_token = save_file['oauth_token']
+            self.oauth_secret = save_file['oauth_secret']
 
-    # STEP 3: Request final access token
-    oauth_session = OAuth1Session(
-        tokens['consumer_key'],
-        client_secret=tokens['consumer_secret'],
-        resource_owner_key=resource_owner_key,
-        resource_owner_secret=resource_owner_secret,
-        verifier=verifier
-    )
-    oauth_tokens = oauth_session.fetch_access_token(access_token_url)
+        if self.consumer_key == "" or self.consumer_secret == "" :
+            print('Retrieve consumer key and consumer secret from http://www.tumblr.com/oauth/apps')
+            self.consumer_key = input('Paste the consumer key here: ')
+            self.consumer_secret = input('Paste the consumer secret here: ')
+            handler.save(save_path, self.to_json())
 
-    tokens['oauth_token'] = oauth_tokens.get('oauth_token')
-    tokens['oauth_token_secret'] = oauth_tokens.get('oauth_token_secret')
+        if self.oauth_token == "" or self.oauth_secret == "":
+            # STEP 1: Obtain request token
+            oauth_session = OAuth1Session(self.consumer_key, client_secret=self.consumer_secret)
+            fetch_response = oauth_session.fetch_request_token(request_token_url)
+            resource_owner_key = fetch_response.get('oauth_token')
+            resource_owner_secret = fetch_response.get('oauth_token_secret')
 
-    with open(save_path, 'w+') as save_file:
-        print("Saving to", save_path)
-        json.dump(tokens, save_file)
+            # STEP 2: Authorize URL + Rresponse
+            full_authorize_url = oauth_session.authorization_url(authorize_url)
 
-    return tokens
+            # Redirect to authentication page
+            webbrowser.open(full_authorize_url)
+            print("\nPlease go here and authorize if the page hasn't opened:\n{}".format(full_authorize_url))
+            redirect_response = input('Allow then paste the full redirect URL here:\n')
+
+            # Retrieve oauth verifier
+            oauth_response = oauth_session.parse_authorization_response(redirect_response)
+
+            verifier = oauth_response.get('oauth_verifier')
+
+            # STEP 3: Request final access token
+            oauth_session = OAuth1Session(
+                self.consumer_key,
+                client_secret=self.consumer_secret,
+                resource_owner_key=resource_owner_key,
+                resource_owner_secret=resource_owner_secret,
+                verifier=verifier
+            )
+            oauth_tokens = oauth_session.fetch_access_token(access_token_url)
+
+            self.oauth_token = oauth_tokens.get('oauth_token')
+            self.oauth_secret = oauth_tokens.get('oauth_token_secret')
+
+            handler.save(save_path, self.to_json())
+
+    def to_json(self):
+
+        return {
+            'consumer_key': self.consumer_key,
+            'consumer_secret': self.consumer_secret,
+            'oauth_token': self.oauth_token,
+            'oauth_secret': self.oauth_secret
+        }
 
 if __name__ == '__main__':
-    # arguments = docopt(__doc__, version=version)
-    # print(arguments)
 
-    save_path = os.path.join(os.path.expanduser('~'), '.tumblr')
-    tokens = {}
+    cli = CodeeCLI()
 
-    if not os.path.exists(save_path):
-        print(save_path, "not found, creating.")
-        tokens = new_oauth(save_path)
-    else:
-        print(save_path, "found, loading.")
-        with open(save_path, "r") as save_file:
-            tokens = json.load(save_file)
-
-    client = codee.TumblrClient(
-        tokens['consumer_key'],
-        tokens['consumer_secret'],
-        tokens['oauth_token'],
-        tokens['oauth_token_secret']
+    tumblrapi = codee.TumblrRestClient(
+        cli.tumblroauth.consumer_key,
+        cli.tumblroauth.consumer_secret,
+        cli.tumblroauth.oauth_token,
+        cli.tumblroauth.oauth_secret
     )
 
-    print('codee client created. You may run codee commands prefixed with "client".\n')
+    print('codee client created. You may run codee commands prefixed with "tumblrapi" and "cli".\n')
 
-    code.interact(local=dict(globals(), **{'client': client,'save_path':save_path}))
+    code.interact(local=dict(globals(), **{'tumblrapi': tumblrapi, 'cli': cli}))
