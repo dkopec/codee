@@ -57,10 +57,6 @@ class FileHandler():
             print("Saving to: ", path)
             json.dump(data, file, indent=2)
 
-    def update(self, path, data):
-        old_data = self.load(path)
-        updated_data = old_data.update(data)
-        self.save(path, updated_data)
 
 class TumblrOAuth():
     """

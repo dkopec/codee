@@ -5,6 +5,7 @@ from .helpers import validate_params, validate_blogname
 from .request import TumblrRequest
 
 
+
 class TumblrRestClient(object):
     """
     A Python Client for the Tumblr API
@@ -489,14 +490,6 @@ class TumblrRestClient(object):
         valid_options = ['id'] + self._post_valid_options(kwargs.get('type', None))
         return self.send_api_request('post', url, kwargs, valid_options)
 
-    def say_hello(self):
-        """
-        Simple hello world function.
-
-        :returns: a string, Hello!
-        """
-        return "Hello!"
-
     @validate_blogname
     def queue_post(self, blogname, post_id, type):
         """
@@ -523,7 +516,17 @@ class TumblrRestClient(object):
         """
         self.edit_post(blogname, id=post_id, type=type, state='draft')
 
-        @validate_blogname
+
+
+    def say_hello(self):
+        """
+        Simple hello world function.
+
+        :returns: a string, Hello!
+        """
+        return "Hello!"
+
+    @validate_blogname
     def all_queued(self, blogname, offset=0):
         """
         Transfers posts from a given blogs drafts to its queue until the queue
@@ -585,7 +588,33 @@ class TumblrRestClient(object):
             print("Before ID: ", before_id)
 
     @validate_blogname
-    def queue_drafts(self, blogname, organic=True):
+    def all_posts(self, blogname, offset=0):
+        """ Get all posts from a blog.
+        """
+        import threading
+
+        data = {"posts":[]}
+
+        previous_id = None
+        request_counter = 0
+        start_time = now
+
+        while True:
+
+            request = self.posts(blogname, offset=offset)
+            offset += 20
+            request_counter += 1
+            print("Request #", request_counter)
+
+            if not request["posts"]:
+                return data
+
+            data["posts"].extend(request["posts"])
+            print("Number of Posts: ", len(data["posts"]))
+
+
+    @validate_blogname
+    def queue_drafts(self, blogname, organic=True, test=False):
         """
         Transfers posts from a given blogs drafts to its queue until the queue
         is full or drafts are empty.
@@ -600,12 +629,20 @@ class TumblrRestClient(object):
 
         drafts = self.all_drafts(blogname)
         queued = self.all_queued(blogname)
-        queued_post_count = len(queued["posts"])
-        print("Current queue count: ", queued_post_count)
+        queued_posts = len(queued["posts"])
+        counter = 0
+        print("Current queue count: ", queued_posts)
 
-        while queued_post_count <= 300 and drafts["posts"]:
+        if organic:
+            drafts["posts"].reverse()
+
+        while queued_posts < 300 and drafts["posts"]:
 
             for index, post in enumerate(drafts["posts"]):
+
+                if queued_posts == 300:
+                    break
+
                 # If organic option is enabled
                 if organic and index > 0:
                     # Skip the post if it is not by the same author as the last
@@ -635,10 +672,13 @@ class TumblrRestClient(object):
                         continue
 
                 print("Queuing post#", post['id'])
-                self.queue_post(blogname, post['id'], type=post['type'])
-                queued_post_count += 1
+                if not test:
+                    self.queue_post(blogname, post['id'], type=post['type'])
 
-        print("Finished. Queued {0} posts from drafts.".format(queued_post_count))
+                counter += 1
+                queued_posts += 1
+
+        print("Finished. Queued {0} posts from drafts.".format(counter))
 
     @validate_blogname
     def draft_queued(self, blogname):
@@ -655,6 +695,9 @@ class TumblrRestClient(object):
 
         for index, post in enumerate(queued["posts"]):
             self.draft_post(blogname, post['id'], type=post['type'])
+
+
+
 
     # Parameters valid for /post, /post/edit, and /post/reblog.
     def _post_valid_options(self, post_type=None):

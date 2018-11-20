@@ -10,6 +10,10 @@ PY3 = sys.version_info[0] == 3
 from requests_oauthlib import OAuth1
 from requests.exceptions import TooManyRedirects, HTTPError
 
+from ratelimit import limits, sleep_and_retry
+
+DAY = 86400
+CALLS = 5000
 
 class TumblrRequest(object):
     """
@@ -32,6 +36,8 @@ class TumblrRequest(object):
             "User-Agent": "pytumblr/" + self.__version,
         }
 
+    @sleep_and_retry
+    @limits(calls=CALLS, period=DAY)
     def get(self, url, params):
         """
         Issues a GET request against the API, properly formatting the params
